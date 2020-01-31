@@ -1,0 +1,31 @@
+name: Deploy
+on:
+  push:
+    branches:
+      - master
+env:
+  AWS_DEFAULT_REGION: us-east-1
+jobs:
+  deploy:
+    name: Deploy new cat image
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@master
+      - name: Setup python
+        uses: actions/setup-python@v1
+        with:
+          python-version: '3.8'
+          architecture: x64
+      - name: Install awscli
+        run: pip install awscli
+      - name: Build container
+        run: docker build -t 672626379771.dkr.ecr.us-east-1.amazonaws.com/cat-stage:latest .
+      - name: Publish container
+        run: |
+          $(aws ecr get-login --no-include-email --region us-east-1)
+          docker push 672626379771.dkr.ecr.us-east-1.amazonaws.com/cat-stage:latest
+      - name: Redeploy app
+        run: aws ecs update-service --force-new-deploy --cluster cat-stage --service cat-stage
