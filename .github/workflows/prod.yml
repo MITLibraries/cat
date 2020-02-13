@@ -3,28 +3,35 @@ on:
   release:
     types: [published]
 env:
-  AWS_DEFAULT_REGION: us-east-1
+  IMAGE: cat-prod
+  CLUSTER: cat-prod
+  SERVICE: cat-prod
 jobs:
   deploy:
     name: Deploy new release
     runs-on: ubuntu-latest
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     steps:
       - uses: actions/checkout@v2
-      - name: Setup python
-        uses: actions/setup-python@v1
+
+      - name: Set AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
         with:
-          python-version: '3.8'
-          architecture: x64
-      - name: Install awscli
-        run: pip install awscli
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
       - name: Build container
-        run: docker build -t 672626379771.dkr.ecr.us-east-1.amazonaws.com/cat-prod:latest .
-      - name: Publish container
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
-          $(aws ecr get-login --no-include-email --region us-east-1)
-          docker push 672626379771.dkr.ecr.us-east-1.amazonaws.com/cat-prod:latest
+          docker build -t $REGISTRY/$IMAGE:latest -t $REGISTRY/$IMAGE:${{ github.ref }} -t $REGISTRY/$IMAGE:${{ github.sha }} .
+
+      - name: Publish container
+        run: docker push ${{ steps.ecr.outputs.registry }}/$IMAGE
+
       - name: Redeploy app
-        run: aws ecs update-service --force-new-deploy --cluster cat-prod --service cat-prod
+        run: aws ecs update-service --force-new-deploy --cluster $CLUSTER --service $SERVICE
